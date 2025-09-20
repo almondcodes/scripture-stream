@@ -1,0 +1,154 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  avatar    String?
+  role      UserRole @default(USER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  playlists     Playlist[]
+  favorites     FavoriteVerse[]
+  verseHistory  VerseHistory[]
+  obsConnections ObsConnection[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Playlist {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isPublic    Boolean  @default(false)
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items PlaylistItem[]
+
+  @@map("playlists")
+}
+
+model PlaylistItem {
+  id         String @id @default(cuid())
+  playlistId String
+  verseRef   String
+  verseText  String
+  version    String @default("kjv")
+  order      Int
+  createdAt  DateTime @default(now())
+
+  // Relations
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@map("playlist_items")
+}
+
+model FavoriteVerse {
+  id        String   @id @default(cuid())
+  userId    String
+  verseRef  String
+  verseText String
+  version   String   @default("kjv")
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, verseRef])
+  @@map("favorite_verses")
+}
+
+model VerseHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  verseRef  String
+  verseText String
+  version   String   @default("kjv")
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("verse_history")
+}
+
+model ObsConnection {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  url         String
+  password    String
+  sourceName  String   @default("Bible Verse")
+  isActive    Boolean  @default(false)
+  lastUsed    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("obs_connections")
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  config      Json     // Template configuration (colors, fonts, etc.)
+  isPublic    Boolean  @default(false)
+  userId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("templates")
+}
+
+model Analytics {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // 'verse_sent', 'playlist_created', etc.
+  metadata  Json?    // Additional data
+  createdAt DateTime @default(now())
+
+  @@map("analytics")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  MODERATOR
+}

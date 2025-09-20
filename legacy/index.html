@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OBS Bible Verse Sender</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>📖 OBS Bible Verse Sender</h1>
+
+    <div class="form-group">
+      <label>Enter Bible Verse (e.g., John 3:16)</label>
+      <input id="verseRef" placeholder="e.g., Psalm 23:1" />
+      <button onclick="sendVerse()">Send to OBS</button>
+    </div>
+
+    <div class="preview">
+      <strong>Preview:</strong>
+      <p id="previewText">None</p>
+    </div>
+
+    <div class="status">
+      <p id="status">⏳ Connecting to OBS...</p>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

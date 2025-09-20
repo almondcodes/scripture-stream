@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: scripture-stream-db
+    environment:
+      POSTGRES_DB: scripture_stream
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: scripture-stream-backend
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/scripture_stream
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+      JWT_EXPIRES_IN: 7d
+      PORT: 3001
+      OBS_DEFAULT_URL: ws://host.docker.internal:4455
+      OBS_DEFAULT_PASSWORD: laL2j8s2E7Sfnj7x
+      OBS_DEFAULT_SOURCE_NAME: Bible Verse
+      BIBLE_API_URL: https://bible-api.com
+      SUPPORTED_VERSIONS: kjv,niv,esv,nasb
+      CORS_ORIGIN: http://localhost:5173
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: scripture-stream-frontend
+    environment:
+      VITE_API_URL: http://localhost:3001
+      VITE_SOCKET_URL: http://localhost:3001
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Redis (for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: scripture-stream-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
