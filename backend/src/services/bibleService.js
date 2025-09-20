@@ -1,9 +1,15 @@
 const axios = require('axios');
+const { BIBLE_VERSIONS, POPULAR_VERSES, BOOK_MAP } = require('../config/bibleConfig');
 
 class BibleService {
   constructor() {
-    this.baseUrl = process.env.BIBLE_API_URL || 'https://bible-api.com';
-    this.supportedVersions = (process.env.SUPPORTED_VERSIONS || 'kjv,niv,esv,nasb').split(',');
+    this.baseUrl = process.env.BIBLE_API_URL || 'https://api.scripture.api.bible/v1';
+    this.apiKey = process.env.BIBLE_API_KEY;
+    this.versionMap = BIBLE_VERSIONS;
+    
+    if (!this.apiKey) {
+      throw new Error('BIBLE_API_KEY environment variable is required');
+    }
   }
 
   /**
@@ -14,28 +20,31 @@ class BibleService {
    */
   async getVerse(reference, version = 'kjv') {
     try {
-      if (!this.supportedVersions.includes(version)) {
-        throw new Error(`Unsupported Bible version: ${version}`);
-      }
-
-      const url = `${this.baseUrl}/${encodeURIComponent(reference)}?translation=${version}`;
+      const bibleId = this.versionMap[version] || this.versionMap['kjv'];
+      
+      // Convert reference to API.Bible format (e.g., "John 3:16" -> "JHN.3.16")
+      const apiReference = this.convertReferenceToApiFormat(reference);
+      
+      const url = `${this.baseUrl}/bibles/${bibleId}/passages/${apiReference}`;
       const response = await axios.get(url, {
         timeout: 10000,
         headers: {
+          'api-key': this.apiKey,
           'User-Agent': 'ScriptureStream/1.0'
         }
       });
 
-      if (!response.data || !response.data.text) {
+      if (!response.data || !response.data.data) {
         throw new Error('Verse not found');
       }
 
+      const passage = response.data.data;
       return {
-        reference: response.data.reference,
-        text: response.data.text.trim(),
+        reference: passage.reference,
+        text: passage.content.replace(/<[^>]*>/g, '').trim(), // Remove HTML tags
         version: version,
-        translation_name: response.data.translation_name,
-        translation_note: response.data.translation_note
+        translation_name: version.toUpperCase(),
+        translation_note: 'API.Bible'
       };
     } catch (error) {
       if (error.response && error.response.status === 404) {
@@ -53,16 +62,60 @@ class BibleService {
    */
   async searchVerses(query, version = 'kjv') {
     try {
-      // Note: bible-api.com doesn't support search, so we'll implement a basic search
-      // In a production app, you'd want to use a more comprehensive Bible API
-      const response = await axios.get(`${this.baseUrl}/search`, {
-        params: { q: query, translation: version },
+      const trimmedQuery = query.trim();
+      
+      // If the query looks like a verse reference, try to fetch it
+      if (this.validateReference(trimmedQuery)) {
+        try {
+          const verse = await this.getVerse(trimmedQuery, version);
+          return [verse];
+        } catch (error) {
+          // If the specific reference fails, return empty
+          return [];
+        }
+      }
+      
+      // Use API.Bible search functionality
+      const bibleId = this.versionMap[version] || this.versionMap['kjv'];
+      const url = `${this.baseUrl}/bibles/${bibleId}/search`;
+      
+      const response = await axios.get(url, {
+        params: {
+          query: trimmedQuery,
+          limit: 10,
+          offset: 0
+        },
+        headers: {
+          'api-key': this.apiKey,
+          'User-Agent': 'ScriptureStream/1.0'
+        },
         timeout: 10000
       });
 
-      return response.data || [];
+      if (!response.data || !response.data.data || !response.data.data.verses) {
+        return [];
+      }
+
+      const verses = response.data.data.verses;
+      const results = [];
+
+      for (const verse of verses) {
+        try {
+          results.push({
+            reference: verse.reference,
+            text: verse.text.replace(/<[^>]*>/g, '').trim(), // Remove HTML tags
+            version: version,
+            translation_name: version.toUpperCase(),
+            translation_note: 'API.Bible'
+          });
+        } catch (error) {
+          continue;
+        }
+      }
+      
+      return results;
     } catch (error) {
-      console.warn('Search not available, returning empty results');
+      console.warn('Search failed:', error.message);
       return [];
     }
   }
@@ -74,26 +127,7 @@ class BibleService {
    */
   async getRandomVerse(version = 'kjv') {
     try {
-      // Popular verses for random selection
-      const popularVerses = [
-        'John 3:16',
-        'Romans 8:28',
-        'Philippians 4:13',
-        'Jeremiah 29:11',
-        'Proverbs 3:5-6',
-        'Psalm 23:1',
-        'Matthew 28:20',
-        'Isaiah 40:31',
-        '2 Corinthians 5:17',
-        'Ephesians 2:8-9',
-        'Galatians 5:22-23',
-        '1 Corinthians 13:4-7',
-        'Matthew 6:33',
-        'Psalm 46:10',
-        'Romans 12:2'
-      ];
-
-      const randomReference = popularVerses[Math.floor(Math.random() * popularVerses.length)];
+      const randomReference = POPULAR_VERSES[Math.floor(Math.random() * POPULAR_VERSES.length)];
       return await this.getVerse(randomReference, version);
     } catch (error) {
       throw new Error(`Failed to get random verse: ${error.message}`);
@@ -111,19 +145,8 @@ class BibleService {
       const today = new Date();
       const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
       
-      const dailyVerses = [
-        'John 3:16', 'Romans 8:28', 'Philippians 4:13', 'Jeremiah 29:11',
-        'Proverbs 3:5-6', 'Psalm 23:1', 'Matthew 28:20', 'Isaiah 40:31',
-        '2 Corinthians 5:17', 'Ephesians 2:8-9', 'Galatians 5:22-23',
-        '1 Corinthians 13:4-7', 'Matthew 6:33', 'Psalm 46:10', 'Romans 12:2',
-        'Psalm 91:1-2', 'Isaiah 41:10', 'Matthew 11:28-30', 'John 14:6',
-        'Romans 10:9-10', 'Ephesians 3:20', 'Philippians 1:6', 'Colossians 3:23',
-        '1 Thessalonians 5:16-18', '2 Timothy 1:7', 'Hebrews 11:1', 'James 1:2-3',
-        '1 Peter 5:7', '1 John 4:19', 'Revelation 3:20', 'Psalm 37:4'
-      ];
-
-      const verseIndex = dayOfYear % dailyVerses.length;
-      const reference = dailyVerses[verseIndex];
+      const verseIndex = dayOfYear % POPULAR_VERSES.length;
+      const reference = POPULAR_VERSES[verseIndex];
       
       return await this.getVerse(reference, version);
     } catch (error) {
@@ -147,11 +170,45 @@ class BibleService {
   }
 
   /**
+   * Convert verse reference to API.Bible format
+   * @param {string} reference - Verse reference (e.g., "John 3:16")
+   * @returns {string} API.Bible format (e.g., "JHN.3.16")
+   */
+  convertReferenceToApiFormat(reference) {
+
+    const parts = reference.trim().split(/\s+/);
+    if (parts.length < 2) return reference;
+
+    let bookName = '';
+    let chapterVerse = '';
+
+    // Handle multi-word book names
+    if (parts.length > 2) {
+      const possibleBook = parts.slice(0, -1).join(' ');
+      if (BOOK_MAP[possibleBook]) {
+        bookName = BOOK_MAP[possibleBook];
+        chapterVerse = parts[parts.length - 1];
+      } else {
+        bookName = BOOK_MAP[parts[0]] || parts[0];
+        chapterVerse = parts.slice(1).join(' ');
+      }
+    } else {
+      bookName = BOOK_MAP[parts[0]] || parts[0];
+      chapterVerse = parts[1];
+    }
+
+    // Convert chapter:verse format to chapter.verse
+    const chapterVerseFormatted = chapterVerse.replace(':', '.');
+    
+    return `${bookName}.${chapterVerseFormatted}`;
+  }
+
+  /**
    * Get supported Bible versions
    * @returns {Array} Array of supported versions
    */
   getSupportedVersions() {
-    return this.supportedVersions;
+    return Object.keys(this.versionMap);
   }
 
   /**

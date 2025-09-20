@@ -79,6 +79,9 @@ If you prefer to run without Docker:
    # Edit backend/.env with your database and OBS settings
    # For Pop!_OS/Ubuntu, the DATABASE_URL should be:
    # DATABASE_URL="postgresql://postgres@localhost:5432/scripture_stream"
+   
+   # IMPORTANT: Change the JWT_SECRET in production!
+   # Generate a strong secret: openssl rand -base64 32
    ```
 
 5. **Set up database:**
@@ -105,6 +108,8 @@ If you prefer to run without Docker:
 8. **Login with seeded accounts:**
    - Admin: `admin@scripturestream.com` / `admin123`
    - User: `user@scripturestream.com` / `admin123`
+   
+   **⚠️ Security Note:** Change these default passwords immediately in production!
 
 ## 📁 Project Structure
 
@@ -197,8 +202,9 @@ When using `docker compose up`, PostgreSQL is automatically configured with:
 # Database (for Pop!_OS/Ubuntu - no password needed)
 DATABASE_URL="postgresql://postgres@localhost:5432/scripture_stream"
 
-# JWT
-JWT_SECRET="your-super-secret-jwt-key"
+# JWT - MUST be changed in production (use a strong, random secret)
+JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
+JWT_EXPIRES_IN="7d"
 
 # OBS
 OBS_DEFAULT_URL="ws://localhost:4455"
@@ -207,7 +213,30 @@ OBS_DEFAULT_PASSWORD="your-obs-password"
 # API
 PORT=3001
 NODE_ENV=development
+
+# Security
+CORS_ORIGIN="http://localhost:5173"
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# File Upload
+MAX_FILE_SIZE=5242880
+UPLOAD_PATH="./uploads"
 ```
+
+### Security Configuration
+
+#### Production Security Checklist
+- [ ] Change default JWT secret to a strong, random value
+- [ ] Use HTTPS in production
+- [ ] Set up proper CORS origins (not `*`)
+- [ ] Configure rate limiting appropriately
+- [ ] Use environment-specific database credentials
+- [ ] Enable PostgreSQL SSL connections
+- [ ] Set up proper firewall rules
+- [ ] Use a reverse proxy (nginx/Apache)
+- [ ] Enable security headers
+- [ ] Regular security updates
 
 ## 📚 API Documentation
 
@@ -283,6 +312,40 @@ npx prisma db seed
 #### Seed Script Issues
 If you encounter template seeding errors, the seed script has been updated to handle the Template model correctly. The script now uses `findFirst` and `create` instead of `upsert` for templates.
 
+### Security Issues
+
+#### Default Credentials
+```bash
+# Change default admin password immediately
+# Login as admin and update password through the UI
+# Or update directly in database:
+sudo -u postgres psql -d scripture_stream
+UPDATE users SET password = '$2a$12$NEW_HASHED_PASSWORD' WHERE email = 'admin@scripturestream.com';
+```
+
+#### JWT Secret Security
+```bash
+# Generate a strong JWT secret
+openssl rand -base64 32
+
+# Update your .env file with the new secret
+JWT_SECRET="your-generated-secret-here"
+```
+
+#### Database Security
+```bash
+# Create a dedicated database user (recommended)
+sudo -u postgres psql
+CREATE USER scripture_user WITH PASSWORD 'strong_password';
+GRANT ALL PRIVILEGES ON DATABASE scripture_stream TO scripture_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO scripture_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO scripture_user;
+\q
+
+# Update DATABASE_URL in .env
+DATABASE_URL="postgresql://scripture_user:strong_password@localhost:5432/scripture_stream"
+```
+
 ### Docker Issues
 
 #### Permission Denied (Linux)
@@ -303,17 +366,54 @@ sudo lsof -i :5173  # Frontend
 # Stop conflicting services or change ports in docker-compose.yml
 ```
 
+## 🔒 Security Best Practices
+
+### Development
+- Never commit `.env` files or sensitive data
+- Use strong, unique passwords for all accounts
+- Regularly update dependencies for security patches
+- Use HTTPS in production environments
+- Implement proper input validation and sanitization
+
+### Production Deployment
+- Use environment variables for all sensitive configuration
+- Enable database SSL/TLS connections
+- Set up proper firewall rules
+- Use a reverse proxy (nginx/Apache) with SSL termination
+- Implement proper logging and monitoring
+- Regular security audits and penetration testing
+- Keep all dependencies updated
+
+### Data Protection
+- Encrypt sensitive data at rest
+- Use secure session management
+- Implement proper access controls
+- Regular backup and recovery testing
+- GDPR/Privacy compliance considerations
+
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
 4. Add tests if applicable
-5. Submit a pull request
+5. Follow security best practices
+6. Submit a pull request
 
 ## 📄 License
 
 MIT License - see LICENSE file for details
+
+## ⚠️ Security Disclaimer
+
+This application is provided for educational and development purposes. When deploying to production:
+
+- **Change all default passwords and secrets**
+- **Use HTTPS/TLS encryption**
+- **Implement proper authentication and authorization**
+- **Regular security updates and monitoring**
+- **Follow OWASP security guidelines**
+- **Conduct security audits before production deployment**
 
 ## 🙏 Acknowledgments
 
@@ -321,3 +421,4 @@ MIT License - see LICENSE file for details
 - OBS Studio: https://obsproject.com/
 - React: https://reactjs.org/
 - Node.js: https://nodejs.org/
+- OWASP Security Guidelines: https://owasp.org/
