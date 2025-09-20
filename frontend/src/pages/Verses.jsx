@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { BookOpen, Search, Star, Clock, Send, RefreshCw, Heart, HeartOff } from 'lucide-react'
 import { versesAPI, obsAPI } from '../services/api'
 import toast from 'react-hot-toast'
@@ -21,6 +21,118 @@ export default function Verses() {
     loadRandomVerse()
     loadObsConnections()
   }, [])
+
+  // Debounced search function
+  const debouncedSearch = useCallback(
+    debounce(async (query) => {
+      if (!query.trim()) {
+        setSearchResults([])
+        return
+      }
+
+      setIsSearching(true)
+      try {
+        const response = await versesAPI.searchVerses(query)
+        const results = response.data.data || []
+        
+        // Process results to split individual verses
+        const processedResults = processSearchResults(results)
+        setSearchResults(processedResults)
+        setActiveTab('search')
+      } catch (error) {
+        console.error('Search failed:', error)
+        toast.error('Search failed. Please try again.')
+        setSearchResults([])
+      } finally {
+        setIsSearching(false)
+      }
+    }, 500), // 500ms delay
+    []
+  )
+
+  // Process search results to split individual verses
+  const processSearchResults = (results) => {
+    const processedResults = []
+    
+    results.forEach(result => {
+      // Check if the reference contains a range (e.g., "James 1:1-27")
+      const rangeMatch = result.reference.match(/^(.+?)(\d+):(\d+)-(\d+)$/)
+      
+      if (rangeMatch) {
+        const [, book, chapter, startVerse, endVerse] = rangeMatch
+        const start = parseInt(startVerse)
+        const end = parseInt(endVerse)
+        
+        // Try multiple methods to split the text
+        let textParts = []
+        
+        // Method 1: Split by verse numbers followed by letters (e.g., "1James", "2My", "3Knowing")
+        const versePattern = /(\d+)([A-Za-z][^0-9]*?)(?=\d+[A-Za-z]|$)/g
+        let match
+        while ((match = versePattern.exec(result.text)) !== null) {
+          textParts.push(match[1] + match[2])
+        }
+        
+        // Method 2: If that doesn't work, try splitting by verse numbers at start of line
+        if (textParts.length <= 1) {
+          textParts = result.text.split(/(?=\d+[A-Za-z])/).filter(part => part.trim())
+        }
+        
+        // Method 3: If still no good split, try splitting by verse numbers anywhere
+        if (textParts.length <= 1) {
+          textParts = result.text.split(/(\d+[A-Za-z])/).filter(part => part.trim())
+        }
+        
+        // Create individual verses
+        for (let i = start; i <= end; i++) {
+          const verseIndex = i - start
+          let verseText = ''
+          
+          if (verseIndex < textParts.length) {
+            verseText = textParts[verseIndex]
+          } else {
+            // If we don't have enough parts, try to extract from the original text
+            const verseNumPattern = new RegExp(`${i}([^0-9]*?)(?=${i + 1}[^0-9]|$)`, 'g')
+            const verseMatch = verseNumPattern.exec(result.text)
+            if (verseMatch) {
+              verseText = i + verseMatch[1]
+            }
+          }
+          
+          if (verseText.trim()) {
+            // Clean up the verse text
+            verseText = verseText.replace(/^\d+/, '').trim()
+            if (verseText) {
+              processedResults.push({
+                ...result,
+                reference: `${book} ${chapter}:${i}`,
+                text: verseText,
+                originalReference: result.reference
+              })
+            }
+          }
+        }
+      } else {
+        // Single verse, add as is
+        processedResults.push(result)
+      }
+    })
+    
+    return processedResults
+  }
+
+  // Debounce utility function
+  function debounce(func, wait) {
+    let timeout
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout)
+        func(...args)
+      }
+      clearTimeout(timeout)
+      timeout = setTimeout(later, wait)
+    }
+  }
 
   const loadFavorites = async () => {
     try {
@@ -62,21 +174,18 @@ export default function Verses() {
     }
   }
 
+  // Handle search input changes
+  const handleSearchInputChange = (e) => {
+    const query = e.target.value
+    setSearchQuery(query)
+    debouncedSearch(query)
+  }
+
+  // Handle search form submission (for manual search button)
   const handleSearch = async (e) => {
     e.preventDefault()
     if (!searchQuery.trim()) return
-
-    setIsSearching(true)
-    try {
-      const response = await versesAPI.searchVerses(searchQuery)
-      setSearchResults(response.data.data || [])
-      setActiveTab('search')
-    } catch (error) {
-      console.error('Search failed:', error)
-      toast.error('Search failed. Please try again.')
-    } finally {
-      setIsSearching(false)
-    }
+    debouncedSearch(searchQuery)
   }
 
   const handleGetVerse = async (reference) => {
@@ -288,9 +397,10 @@ export default function Verses() {
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search for verses (e.g., 'love', 'John 3:16')"
+                  onChange={handleSearchInputChange}
+                  placeholder={isSearching ? "Searching..." : "Search for verses (e.g., 'love', 'John 3:16')"}
                   className="flex-1 input input-bordered"
+                  disabled={isSearching}
                 />
                 <button
                   type="submit"
@@ -311,8 +421,15 @@ export default function Verses() {
                     Search Results ({searchResults.length})
                   </h3>
                   {searchResults.map((verse, index) => (
-                    <VerseCard key={index} verse={verse} />
+                    <VerseCard key={`${verse.reference}-${index}`} verse={verse} />
                   ))}
+                </div>
+              )}
+
+              {isSearching && (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                  <p className="mt-2 text-gray-500">Searching...</p>
                 </div>
               )}
 
@@ -330,7 +447,7 @@ export default function Verses() {
             <div className="space-y-4">
               {favorites.length > 0 ? (
                 favorites.map((verse, index) => (
-                  <VerseCard key={index} verse={verse} />
+                  <VerseCard key={`fav-${verse.reference}-${index}`} verse={verse} />
                 ))
               ) : (
                 <div className="text-center py-8">
@@ -347,7 +464,7 @@ export default function Verses() {
             <div className="space-y-4">
               {history.length > 0 ? (
                 history.map((verse, index) => (
-                  <VerseCard key={index} verse={verse} showActions={false} />
+                  <VerseCard key={`hist-${verse.reference}-${index}`} verse={verse} showActions={false} />
                 ))
               ) : (
                 <div className="text-center py-8">
