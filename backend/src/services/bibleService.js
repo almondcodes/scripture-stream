@@ -14,11 +14,176 @@ class BibleService {
 
   /**
    * Fetch a Bible verse by reference
-   * @param {string} reference - Bible verse reference (e.g., "John 3:16")
+   * @param {string} reference - Bible verse reference (e.g., "John 3:16" or "James 1:2-9")
    * @param {string} version - Bible version (default: "kjv")
    * @returns {Promise<Object>} Verse data
    */
   async getVerse(reference, version = 'kjv') {
+    try {
+      // Check if this is a verse range
+      const rangeMatch = reference.match(/^(.+?)(\d+):(\d+)-(\d+)$/);
+      
+      if (rangeMatch) {
+        // Try to use the passages endpoint for ranges first
+        try {
+          return await this.getPassageRange(reference, version);
+        } catch (error) {
+          console.warn(`Passage endpoint failed for ${reference}, falling back to individual verses:`, error.message);
+          // Fallback to individual verses if passage endpoint fails
+          return await this.getIndividualVersesInRange(reference, version);
+        }
+      } else {
+        // Single verse
+        return await this.getSingleVerse(reference, version);
+      }
+    } catch (error) {
+      throw new Error(`Failed to fetch verse: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get a passage range using the passages endpoint
+   * @param {string} reference - Verse reference (e.g., "James 1:2-9")
+   * @param {string} version - Bible version
+   * @returns {Promise<Object>} Passage data
+   */
+  async getPassageRange(reference, version = 'kjv') {
+    try {
+      const bibleId = this.versionMap[version] || this.versionMap['kjv'];
+      
+      // Convert to API.Bible passage format (e.g., "JAS.1.2-JAS.1.9")
+      const passageId = this.convertRangeToPassageFormat(reference);
+      
+      const url = `${this.baseUrl}/bibles/${bibleId}/passages/${passageId}`;
+      const response = await axios.get(url, {
+        timeout: 10000,
+        headers: {
+          'api-key': this.apiKey,
+          'User-Agent': 'ScriptureStream/1.0'
+        }
+      });
+
+      if (!response.data || !response.data.data) {
+        throw new Error('Passage not found');
+      }
+
+      const passage = response.data.data;
+      
+      // Parse individual verses from the passage content
+      const verses = this.parseVersesFromPassage(passage, reference);
+      
+      return {
+        reference: reference,
+        text: passage.content.replace(/<[^>]*>/g, '').trim(), // Remove HTML tags
+        version: version,
+        translation_name: version.toUpperCase(),
+        translation_note: 'API.Bible',
+        verses: verses // Include individual verses for processing
+      };
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        throw new Error('Passage not found');
+      }
+      throw new Error(`Failed to fetch passage: ${error.message}`);
+    }
+  }
+
+  /**
+   * Parse individual verses from a passage
+   * @param {Object} passage - Passage data from API.Bible
+   * @param {string} originalReference - Original reference
+   * @returns {Array} Array of individual verses
+   */
+  parseVersesFromPassage(passage, originalReference) {
+    const rangeMatch = originalReference.match(/^(.+?)(\d+):(\d+)-(\d+)$/);
+    if (!rangeMatch) return [];
+
+    const [, book, chapter, startVerse, endVerse] = rangeMatch;
+    const start = parseInt(startVerse);
+    const end = parseInt(endVerse);
+    
+    const verses = [];
+    const text = passage.content.replace(/<[^>]*>/g, ''); // Remove HTML tags
+    
+    // Try to split by verse numbers
+    const versePattern = /(\d+)([A-Za-z][^0-9]*?)(?=\d+[A-Za-z]|$)/g;
+    let match;
+    const textParts = [];
+    
+    while ((match = versePattern.exec(text)) !== null) {
+      textParts.push(match[1] + match[2]);
+    }
+    
+    for (let i = start; i <= end; i++) {
+      const verseIndex = i - start;
+      let verseText = '';
+      
+      if (verseIndex < textParts.length) {
+        verseText = textParts[verseIndex].replace(/^\d+/, '').trim();
+      }
+      
+      if (verseText) {
+        verses.push({
+          reference: `${book} ${chapter}:${i}`,
+          text: verseText,
+          version: passage.bibleId,
+          translation_name: passage.bibleId,
+          translation_note: 'API.Bible'
+        });
+      }
+    }
+    
+    return verses;
+  }
+
+  /**
+   * Get individual verses in a range (fallback method)
+   * @param {string} reference - Verse reference (e.g., "James 1:2-9")
+   * @param {string} version - Bible version
+   * @returns {Promise<Object>} Verse data
+   */
+  async getIndividualVersesInRange(reference, version = 'kjv') {
+    const rangeMatch = reference.match(/^(.+?)(\d+):(\d+)-(\d+)$/);
+    const [, book, chapter, startVerse, endVerse] = rangeMatch;
+    const start = parseInt(startVerse);
+    const end = parseInt(endVerse);
+    
+    const verses = [];
+    let combinedText = '';
+    
+    for (let i = start; i <= end; i++) {
+      try {
+        const singleRef = `${book} ${chapter}:${i}`;
+        const verse = await this.getSingleVerse(singleRef, version);
+        verses.push(verse);
+        combinedText += `${i}${verse.text.replace(/^\d+/, '')}`;
+      } catch (error) {
+        // Skip missing verses in range
+        console.warn(`Verse ${book} ${chapter}:${i} not found, skipping`);
+      }
+    }
+    
+    if (verses.length === 0) {
+      throw new Error('No verses found in range');
+    }
+    
+    return {
+      reference: reference,
+      text: combinedText,
+      version: version,
+      translation_name: version.toUpperCase(),
+      translation_note: 'API.Bible',
+      verses: verses // Include individual verses for processing
+    };
+  }
+
+  /**
+   * Fetch a single Bible verse (helper method)
+   * @param {string} reference - Bible verse reference (e.g., "John 3:16")
+   * @param {string} version - Bible version (default: "kjv")
+   * @returns {Promise<Object>} Verse data
+   */
+  async getSingleVerse(reference, version = 'kjv') {
     try {
       const bibleId = this.versionMap[version] || this.versionMap['kjv'];
       
@@ -175,7 +340,6 @@ class BibleService {
    * @returns {string} API.Bible format (e.g., "JHN.3.16")
    */
   convertReferenceToApiFormat(reference) {
-
     const parts = reference.trim().split(/\s+/);
     if (parts.length < 2) return reference;
 
@@ -197,10 +361,42 @@ class BibleService {
       chapterVerse = parts[1];
     }
 
-    // Convert chapter:verse format to chapter.verse
-    const chapterVerseFormatted = chapterVerse.replace(':', '.');
+    // Handle verse ranges (e.g., "1:2-9" or "1:2-9,15-20")
+    if (chapterVerse.includes(':')) {
+      const [chapter, versePart] = chapterVerse.split(':');
+      
+      // Check if it's a range
+      if (versePart.includes('-')) {
+        // For ranges, API.Bible expects format like "JAS.1.2-9"
+        const verseRange = versePart.replace('-', '-');
+        return `${bookName}.${chapter}.${verseRange}`;
+      } else {
+        // Single verse
+        return `${bookName}.${chapter}.${versePart}`;
+      }
+    }
     
-    return `${bookName}.${chapterVerseFormatted}`;
+    // Just chapter reference
+    return `${bookName}.${chapterVerse}`;
+  }
+
+  /**
+   * Convert verse range to API.Bible passage format
+   * @param {string} reference - Verse reference (e.g., "James 1:2-9")
+   * @returns {string} API.Bible passage format (e.g., "JAS.1.2-JAS.1.9")
+   */
+  convertRangeToPassageFormat(reference) {
+    const rangeMatch = reference.match(/^(.+?)(\d+):(\d+)-(\d+)$/);
+    
+    if (!rangeMatch) {
+      return this.convertReferenceToApiFormat(reference);
+    }
+    
+    const [, book, chapter, startVerse, endVerse] = rangeMatch;
+    const bookName = BOOK_MAP[book.trim()] || book.trim();
+    
+    // API.Bible passage format: BOOK.CHAPTER.VERSE-BOOK.CHAPTER.VERSE
+    return `${bookName}.${chapter}.${startVerse}-${bookName}.${chapter}.${endVerse}`;
   }
 
   /**
@@ -209,6 +405,39 @@ class BibleService {
    */
   getSupportedVersions() {
     return Object.keys(this.versionMap);
+  }
+
+  /**
+   * Get available Bible versions from API.Bible
+   * @returns {Promise<Array>} Array of available Bible versions
+   */
+  async getAvailableBibles() {
+    try {
+      const url = `${this.baseUrl}/bibles`;
+      const response = await axios.get(url, {
+        timeout: 10000,
+        headers: {
+          'api-key': this.apiKey,
+          'User-Agent': 'ScriptureStream/1.0'
+        }
+      });
+
+      if (!response.data || !response.data.data) {
+        return [];
+      }
+
+      return response.data.data.map(bible => ({
+        id: bible.id,
+        name: bible.name,
+        abbreviation: bible.abbreviation,
+        language: bible.language?.name || 'Unknown',
+        description: bible.description || '',
+        copyright: bible.copyright || ''
+      }));
+    } catch (error) {
+      console.error('Failed to fetch available Bibles:', error.message);
+      return [];
+    }
   }
 
   /**

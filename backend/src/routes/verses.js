@@ -315,4 +315,19 @@ router.post('/history', authenticateToken, async (req, res, next) => {
   }
 });
 
+// Get available Bible versions
+router.get('/bibles', async (req, res, next) => {
+  try {
+    const bibles = await bibleService.getAvailableBibles();
+
+    res.json({
+      success: true,
+      data: bibles,
+      count: bibles.length
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
