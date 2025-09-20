@@ -77,6 +77,10 @@ class ObsService {
             
             this.connections.set(connectionId, connection);
             console.log(`OBS authenticated: ${connectionId}`);
+            
+            // Set up the text source with optimal 16:9 settings
+            this.setupTextSourceFor16_9(connection);
+            
             resolve(connection);
           }
 
@@ -118,6 +122,118 @@ class ObsService {
   }
 
   /**
+   * Set up text source with optimal 16:9 settings
+   * @param {Object} connection - OBS connection object
+   */
+  async setupTextSourceFor16_9(connection) {
+    try {
+      const setupPayload = {
+        op: 6,
+        d: {
+          requestType: "SetInputSettings",
+          requestId: `setup16_9_${Date.now()}`,
+          requestData: {
+            inputName: connection.config.sourceName,
+            inputSettings: {
+              text: "Bible Verse Ready",
+              font: {
+                face: "Arial, sans-serif",
+                size: 48,
+                flags: 1, // Bold
+                color: 0xFFFFFF, // White text
+                color2: 0x000000, // Black outline
+                color3: 0x000000,
+                color4: 0x000000
+              },
+              align: "center",
+              valign: "center",
+              outline: true,
+              outline_size: 2,
+              outline_color: 0x000000,
+              background: false,
+              gradient: false,
+              use_extents: true,
+              extents_cx: 1920, // 16:9 width
+              extents_cy: 1080, // 16:9 height
+              extents_wrap: true,
+              extents_align: "center"
+            }
+          }
+        }
+      };
+
+      connection.ws.send(JSON.stringify(setupPayload));
+      console.log(`Set up 16:9 text source for: ${connection.config.sourceName}`);
+    } catch (error) {
+      console.error('Error setting up 16:9 text source:', error);
+    }
+  }
+
+  /**
+   * Format verse text optimally for 16:9 OBS display
+   * @param {string} reference - Bible reference
+   * @param {string} text - Verse text
+   * @param {string} version - Bible version
+   * @returns {Object} Formatted OBS settings
+   */
+  formatVerseForOBS(reference, text, version) {
+    // Calculate optimal font size for 16:9 (1920x1080) - roughly 1/40th of screen width
+    const fontSize = 48; // Good for 1920x1080, scales well
+    
+    // Format the text with proper line breaks for readability
+    const formattedText = this.wrapTextForOBS(text, 60); // 60 characters per line max
+    
+    return {
+      text: `${reference}\n\n${formattedText}`,
+      font: {
+        face: "Arial, sans-serif",
+        size: fontSize,
+        flags: 1, // Bold
+        color: 0xFFFFFF, // White text
+        color2: 0x000000, // Black outline
+        color3: 0x000000,
+        color4: 0x000000
+      },
+      align: "center",
+      valign: "center",
+      outline: true,
+      outline_size: 2,
+      outline_color: 0x000000,
+      background: false,
+      gradient: false,
+      use_extents: true,
+      extents_cx: 1920, // 16:9 width
+      extents_cy: 1080, // 16:9 height
+      extents_wrap: true,
+      extents_align: "center"
+    };
+  }
+
+  /**
+   * Wrap text to fit within specified character limit per line
+   * @param {string} text - Text to wrap
+   * @param {number} maxLength - Maximum characters per line
+   * @returns {string} Wrapped text
+   */
+  wrapTextForOBS(text, maxLength = 60) {
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      if ((currentLine + word).length <= maxLength) {
+        currentLine += (currentLine ? ' ' : '') + word;
+      } else {
+        if (currentLine) lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    
+    if (currentLine) lines.push(currentLine);
+    return lines.join('\n');
+  }
+
+  /**
    * Send verse to OBS
    * @param {string} connectionId - Connection ID (can be live connection ID or database connection ID)
    * @param {Object} verseData - Verse data to send
@@ -137,7 +253,9 @@ class ObsService {
     }
 
     const { reference, text, version } = verseData;
-    const formattedText = `${reference}: ${text}`;
+    
+    // Format verse optimally for 16:9 OBS display
+    const formattedSettings = this.formatVerseForOBS(reference, text, version);
 
     const payload = {
       op: 6,
@@ -146,7 +264,7 @@ class ObsService {
         requestId: `setVerse_${Date.now()}`,
         requestData: {
           inputName: connection.config.sourceName,
-          inputSettings: { text: formattedText }
+          inputSettings: formattedSettings
         }
       }
     };

@@ -6,9 +6,9 @@
 // Bible version mappings (API.Bible IDs)
 const BIBLE_VERSIONS = {
   'kjv': 'de4e12af7f28f599-02', // King James Version
-  'niv': '06125adad2d5898a-01', // New International Version
-  'esv': '65eec8e0b60e656b-01', // English Standard Version
-  'nasb': 'bbd1e3b4b8b4c8b5-01' // New American Standard Bible
+  'asv': '06125adad2d5898a-01', // American Standard Version
+  'web': '9879dbb7cfe39e4d-04', // World English Bible (Protestant)
+  'bsb': 'bba9f40183526463-01'  // Berean Standard Bible
 };
 
 // Popular verses for random selection and daily verses

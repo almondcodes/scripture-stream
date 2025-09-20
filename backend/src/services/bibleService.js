@@ -6,10 +6,68 @@ class BibleService {
     this.baseUrl = process.env.BIBLE_API_URL || 'https://api.scripture.api.bible/v1';
     this.apiKey = process.env.BIBLE_API_KEY;
     this.versionMap = BIBLE_VERSIONS;
+    this.dynamicVersionMap = new Map(); // For dynamic version mapping
     
     if (!this.apiKey) {
       throw new Error('BIBLE_API_KEY environment variable is required');
     }
+  }
+
+  /**
+   * Get Bible ID for a version key, with fallback to dynamic mapping
+   * @param {string} version - Version key (e.g., 'kjv', 'niv')
+   * @returns {string} Bible ID
+   */
+  getBibleId(version) {
+    console.log(`Getting Bible ID for version: ${version}`);
+    
+    // First try static mapping
+    if (this.versionMap[version]) {
+      console.log(`Found in static mapping: ${this.versionMap[version]}`);
+      return this.versionMap[version];
+    }
+    
+    // Then try dynamic mapping
+    if (this.dynamicVersionMap.has(version)) {
+      console.log(`Found in dynamic mapping: ${this.dynamicVersionMap.get(version)}`);
+      return this.dynamicVersionMap.get(version);
+    }
+    
+    // Fallback to KJV
+    console.log(`Using fallback KJV: ${this.versionMap['kjv'] || 'de4e12af7f28f599-02'}`);
+    return this.versionMap['kjv'] || 'de4e12af7f28f599-02';
+  }
+
+  /**
+   * Build dynamic version mapping from available Bibles
+   * @param {Array} availableBibles - Array of Bible objects from API
+   */
+  buildDynamicVersionMap(availableBibles) {
+    console.log(`Building dynamic version map from ${availableBibles.length} Bibles`);
+    
+    const versionPatterns = {
+      'kjv': /king james|kjv/i,
+      'asv': /american standard|asv/i,
+      'web': /world english|web/i,
+      'bsb': /berean standard|bsb/i,
+      'niv': /new international|niv/i,
+      'esv': /english standard|esv/i,
+      'nasb': /new american standard|nasb/i
+    };
+
+    Object.entries(versionPatterns).forEach(([key, pattern]) => {
+      const match = availableBibles.find(bible => 
+        pattern.test(bible.name) || pattern.test(bible.abbreviation)
+      );
+      if (match) {
+        console.log(`Mapped ${key} -> ${match.id} (${match.name})`);
+        this.dynamicVersionMap.set(key, match.id);
+      } else {
+        console.log(`No match found for ${key}`);
+      }
+    });
+    
+    console.log(`Dynamic version map built with ${this.dynamicVersionMap.size} entries`);
   }
 
   /**
@@ -49,7 +107,7 @@ class BibleService {
    */
   async getPassageRange(reference, version = 'kjv') {
     try {
-      const bibleId = this.versionMap[version] || this.versionMap['kjv'];
+      const bibleId = this.getBibleId(version);
       
       // Convert to API.Bible passage format (e.g., "JAS.1.2-JAS.1.9")
       const passageId = this.convertRangeToPassageFormat(reference);
@@ -185,7 +243,7 @@ class BibleService {
    */
   async getSingleVerse(reference, version = 'kjv') {
     try {
-      const bibleId = this.versionMap[version] || this.versionMap['kjv'];
+      const bibleId = this.getBibleId(version);
       
       // Convert reference to API.Bible format (e.g., "John 3:16" -> "JHN.3.16")
       const apiReference = this.convertReferenceToApiFormat(reference);
@@ -241,7 +299,7 @@ class BibleService {
       }
       
       // Use API.Bible search functionality
-      const bibleId = this.versionMap[version] || this.versionMap['kjv'];
+      const bibleId = this.getBibleId(version);
       const url = `${this.baseUrl}/bibles/${bibleId}/search`;
       
       const response = await axios.get(url, {
@@ -415,7 +473,7 @@ class BibleService {
     try {
       const url = `${this.baseUrl}/bibles`;
       const response = await axios.get(url, {
-        timeout: 10000,
+        timeout: 30000, // Increased timeout to 30 seconds
         headers: {
           'api-key': this.apiKey,
           'User-Agent': 'ScriptureStream/1.0'
@@ -426,7 +484,7 @@ class BibleService {
         return [];
       }
 
-      return response.data.data.map(bible => ({
+      const bibles = response.data.data.map(bible => ({
         id: bible.id,
         name: bible.name,
         abbreviation: bible.abbreviation,
@@ -434,9 +492,52 @@ class BibleService {
         description: bible.description || '',
         copyright: bible.copyright || ''
       }));
+
+      // Build dynamic version mapping
+      this.buildDynamicVersionMap(bibles);
+
+      return bibles;
     } catch (error) {
       console.error('Failed to fetch available Bibles:', error.message);
-      return [];
+      
+      // Return fallback common Bible versions if API fails
+      const fallbackBibles = [
+        {
+          id: 'de4e12af7f28f599-02',
+          name: 'King James (Authorised) Version',
+          abbreviation: 'engKJV',
+          language: 'English',
+          description: 'Protestant',
+          copyright: ''
+        },
+        {
+          id: '06125adad2d5898a-01',
+          name: 'The Holy Bible, American Standard Version',
+          abbreviation: 'ASV',
+          language: 'English',
+          description: 'Bible',
+          copyright: ''
+        },
+        {
+          id: '9879dbb7cfe39e4d-04',
+          name: 'World English Bible',
+          abbreviation: 'WEB',
+          language: 'English',
+          description: 'Protestant',
+          copyright: ''
+        },
+        {
+          id: 'bba9f40183526463-01',
+          name: 'Berean Standard Bible',
+          abbreviation: 'BSB',
+          language: 'English',
+          description: 'Berean Standard Bible',
+          copyright: ''
+        }
+      ];
+      
+      console.log('Using fallback Bible versions:', fallbackBibles.length);
+      return fallbackBibles;
     }
   }
 

@@ -5,7 +5,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 // Create axios instance
 const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
-  timeout: 10000,
+  timeout: 35000, // Increased timeout to 35 seconds to match backend
   headers: {
     'Content-Type': 'application/json',
   },
@@ -61,6 +61,7 @@ export const versesAPI = {
   getDailyVerse: (version = 'kjv') => 
     api.get(`/verses/daily?version=${version}`),
   getVersions: () => api.get('/verses/versions'),
+  getAvailableBibles: () => api.get('/verses/bibles'),
   addToFavorites: (verseData) => api.post('/verses/favorite', verseData),
   removeFromFavorites: (reference) => api.delete(`/verses/favorite/${encodeURIComponent(reference)}`),
   getFavorites: (page = 1, limit = 20) => 

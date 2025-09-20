@@ -13,6 +13,51 @@ export default function Verses() {
   const [randomVerse, setRandomVerse] = useState(null)
   const [isLoadingRandom, setIsLoadingRandom] = useState(false)
   const [obsConnections, setObsConnections] = useState([])
+  const [availableBibles, setAvailableBibles] = useState([])
+  const [selectedBible, setSelectedBible] = useState('kjv')
+  const [isLoadingBibles, setIsLoadingBibles] = useState(false)
+  
+  // Filter popular English Bible versions from API response
+  const getPopularBibleVersions = () => {
+    console.log('getPopularBibleVersions called, availableBibles length:', availableBibles.length)
+    if (!availableBibles.length) {
+      console.log('No available Bibles, returning empty array')
+      return []
+    }
+    
+    // Define popular English Bible version patterns
+    const popularPatterns = [
+      { pattern: /king james|kjv/i, key: 'kjv' },
+      { pattern: /american standard|asv/i, key: 'asv' },
+      { pattern: /world english|web/i, key: 'web' },
+      { pattern: /berean standard|bsb/i, key: 'bsb' },
+      { pattern: /new international|niv/i, key: 'niv' },
+      { pattern: /english standard|esv/i, key: 'esv' },
+      { pattern: /new american standard|nasb/i, key: 'nasb' }
+    ]
+    
+    const popularVersions = []
+    
+    // Find matching versions from API response
+    popularPatterns.forEach(({ pattern, key }) => {
+      const match = availableBibles.find(bible => 
+        pattern.test(bible.name) || pattern.test(bible.abbreviation)
+      )
+      if (match) {
+        console.log(`Found match for ${key}:`, match.name, match.abbreviation)
+        popularVersions.push({
+          key,
+          name: match.name,
+          abbreviation: match.abbreviation,
+          apiId: match.id,
+          language: match.language
+        })
+      }
+    })
+    
+    console.log('Final popularVersions:', popularVersions)
+    return popularVersions
+  }
 
   // Load favorites and history on component mount
   useEffect(() => {
@@ -20,7 +65,24 @@ export default function Verses() {
     loadHistory()
     loadRandomVerse()
     loadObsConnections()
+    loadAvailableBibles()
   }, [])
+
+  // Debug: Log when availableBibles changes
+  useEffect(() => {
+    console.log('availableBibles changed:', availableBibles.length, 'Bibles')
+    if (availableBibles.length > 0) {
+      console.log('First few Bibles:', availableBibles.slice(0, 3))
+    }
+  }, [availableBibles])
+
+  // Reload random verse when selectedBible changes
+  useEffect(() => {
+    if (selectedBible) {
+      console.log('selectedBible changed, reloading random verse with:', selectedBible)
+      loadRandomVerse()
+    }
+  }, [selectedBible])
 
   // Debounced search function
   const debouncedSearch = useCallback(
@@ -32,7 +94,8 @@ export default function Verses() {
 
       setIsSearching(true)
       try {
-        const response = await versesAPI.searchVerses(query)
+        console.log('Searching with version:', selectedBible)
+        const response = await versesAPI.searchVerses(query, selectedBible)
         const results = response.data.data || []
         
         // Process results to split individual verses
@@ -47,7 +110,7 @@ export default function Verses() {
         setIsSearching(false)
       }
     }, 500), // 500ms delay
-    []
+    [selectedBible]
   )
 
   // Process search results to split individual verses
@@ -155,7 +218,8 @@ export default function Verses() {
   const loadRandomVerse = async () => {
     setIsLoadingRandom(true)
     try {
-      const response = await versesAPI.getRandomVerse()
+      console.log('Loading random verse with version:', selectedBible)
+      const response = await versesAPI.getRandomVerse(selectedBible)
       setRandomVerse(response.data.data)
     } catch (error) {
       console.error('Failed to load random verse:', error)
@@ -174,6 +238,44 @@ export default function Verses() {
     }
   }
 
+  const loadAvailableBibles = async () => {
+    console.log('Loading available Bibles...')
+    setIsLoadingBibles(true)
+    try {
+      const response = await versesAPI.getAvailableBibles()
+      console.log('Available Bibles response:', response.data?.length || 0, 'Bibles')
+      setAvailableBibles(response.data || [])
+    } catch (error) {
+      console.error('Failed to load available Bibles:', error)
+      if (error.code === 'ECONNABORTED') {
+        toast.error('Bible versions are loading slowly. Using default versions.')
+      } else {
+        toast.error('Failed to load Bible versions. Using default versions.')
+      }
+      // Set fallback versions
+      setAvailableBibles([
+        { id: 'de4e12af7f28f599-02', name: 'King James Version', abbreviation: 'KJV', language: 'English' },
+        { id: '06125adad2d5898a-01', name: 'American Standard Version', abbreviation: 'ASV', language: 'English' },
+        { id: '9879dbb7cfe39e4d-04', name: 'World English Bible', abbreviation: 'WEB', language: 'English' },
+        { id: 'bba9f40183526463-01', name: 'Berean Standard Bible', abbreviation: 'BSB', language: 'English' }
+      ])
+    } finally {
+      setIsLoadingBibles(false)
+    }
+  }
+
+  const handleBibleVersionChange = (newVersion) => {
+    console.log('Bible version changed to:', newVersion)
+    setSelectedBible(newVersion)
+    
+    // If there's a current search query, re-search with the new version
+    if (searchQuery.trim()) {
+      console.log('Re-searching with new version:', newVersion, 'query:', searchQuery)
+      debouncedSearch(searchQuery)
+    }
+    // Don't clear search results - let them update with new version
+  }
+
   // Handle search input changes
   const handleSearchInputChange = (e) => {
     const query = e.target.value
@@ -190,7 +292,7 @@ export default function Verses() {
 
   const handleGetVerse = async (reference) => {
     try {
-      const response = await versesAPI.getVerse(reference)
+      const response = await versesAPI.getVerse(reference, selectedBible)
       const verse = response.data.data
       
       // Add to history
@@ -398,13 +500,40 @@ export default function Verses() {
                   type="text"
                   value={searchQuery}
                   onChange={handleSearchInputChange}
-                  placeholder={isSearching ? "Searching..." : "Search for verses (e.g., 'love', 'John 3:16')"}
+                  placeholder="Search for verses (e.g., 'love', 'John 3:16')"
                   className="flex-1 input input-bordered"
-                  disabled={isSearching}
                 />
+                <div className="relative">
+                  <div className="text-xs text-gray-500 mb-1">Current: {selectedBible}</div>
+                  <select
+                    value={selectedBible}
+                    onChange={(e) => {
+                      console.log('Dropdown changed to:', e.target.value)
+                      handleBibleVersionChange(e.target.value)
+                    }}
+                    className="select select-bordered w-32"
+                    disabled={isLoadingBibles}
+                  >
+                    {isLoadingBibles ? (
+                      <option>Loading...</option>
+                    ) : getPopularBibleVersions().length > 0 ? (
+                      getPopularBibleVersions().map(bible => (
+                        <option key={bible.key} value={bible.key}>
+                          {bible.abbreviation}
+                        </option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="kjv">KJV</option>
+                        <option value="asv">ASV</option>
+                        <option value="web">WEB</option>
+                        <option value="bsb">BSB</option>
+                      </>
+                    )}
+                  </select>
+                </div>
                 <button
                   type="submit"
-                  disabled={isSearching}
                   className="btn btn-primary"
                 >
                   {isSearching ? (
