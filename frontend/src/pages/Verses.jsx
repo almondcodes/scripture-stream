@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { BookOpen, Search, Star, Clock, Send, RefreshCw, Heart, HeartOff } from 'lucide-react'
 import { versesAPI, obsAPI } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 export default function Verses() {
+  const { user, isAuthenticated } = useAuth()
   const [activeTab, setActiveTab] = useState('search')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -83,6 +85,19 @@ export default function Verses() {
       loadRandomVerse()
     }
   }, [selectedBible])
+
+  // Reload favorites and history when user authentication changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('User authenticated, loading favorites and history')
+      loadFavorites()
+      loadHistory()
+    } else {
+      console.log('User not authenticated, clearing favorites and history')
+      setFavorites([])
+      setHistory([])
+    }
+  }, [isAuthenticated])
 
   // Debounced search function
   const debouncedSearch = useCallback(
@@ -198,20 +213,72 @@ export default function Verses() {
   }
 
   const loadFavorites = async () => {
+    if (!isAuthenticated) {
+      console.log('User not authenticated, skipping favorites load')
+      setFavorites([])
+      return
+    }
+    
     try {
+      console.log('Loading favorites...')
       const response = await versesAPI.getFavorites()
-      setFavorites(response.data.data || [])
+      console.log('Favorites response:', response.data)
+      
+      // Map API response to match VerseCard expected format
+      const mappedFavorites = (response.data.data || []).map(fav => ({
+        reference: fav.verseRef,
+        text: fav.verseText,
+        version: fav.version,
+        translation_name: fav.version.toUpperCase(),
+        translation_note: 'Saved Favorite'
+      }))
+      
+      console.log('Mapped favorites:', mappedFavorites)
+      setFavorites(mappedFavorites)
     } catch (error) {
       console.error('Failed to load favorites:', error)
+      console.error('Error details:', error.response?.data)
+      // Show user-friendly error message
+      if (error.response?.status === 401) {
+        toast.error('Please log in to view your favorites')
+      } else {
+        toast.error('Failed to load favorites')
+      }
     }
   }
 
   const loadHistory = async () => {
+    if (!isAuthenticated) {
+      console.log('User not authenticated, skipping history load')
+      setHistory([])
+      return
+    }
+    
     try {
+      console.log('Loading history...')
       const response = await versesAPI.getHistory()
-      setHistory(response.data.data || [])
+      console.log('History response:', response.data)
+      
+      // Map API response to match VerseCard expected format
+      const mappedHistory = (response.data.data || []).map(hist => ({
+        reference: hist.verseRef,
+        text: hist.verseText,
+        version: hist.version,
+        translation_name: hist.version.toUpperCase(),
+        translation_note: 'History'
+      }))
+      
+      console.log('Mapped history:', mappedHistory)
+      setHistory(mappedHistory)
     } catch (error) {
       console.error('Failed to load history:', error)
+      console.error('Error details:', error.response?.data)
+      // Show user-friendly error message
+      if (error.response?.status === 401) {
+        toast.error('Please log in to view your history')
+      } else {
+        toast.error('Failed to load history')
+      }
     }
   }
 
@@ -574,7 +641,13 @@ export default function Verses() {
           {/* Favorites Tab */}
           {activeTab === 'favorites' && (
             <div className="space-y-4">
-              {favorites.length > 0 ? (
+              {!isAuthenticated ? (
+                <div className="text-center py-8">
+                  <Star className="mx-auto h-8 w-8 text-gray-400" />
+                  <p className="mt-2 text-gray-500">Please log in to view your favorites</p>
+                  <p className="text-sm text-gray-400">Sign in to save and access your favorite verses</p>
+                </div>
+              ) : favorites.length > 0 ? (
                 favorites.map((verse, index) => (
                   <VerseCard key={`fav-${verse.reference}-${index}`} verse={verse} />
                 ))
@@ -591,7 +664,13 @@ export default function Verses() {
           {/* History Tab */}
           {activeTab === 'history' && (
             <div className="space-y-4">
-              {history.length > 0 ? (
+              {!isAuthenticated ? (
+                <div className="text-center py-8">
+                  <Clock className="mx-auto h-8 w-8 text-gray-400" />
+                  <p className="mt-2 text-gray-500">Please log in to view your history</p>
+                  <p className="text-sm text-gray-400">Sign in to track your recently viewed verses</p>
+                </div>
+              ) : history.length > 0 ? (
                 history.map((verse, index) => (
                   <VerseCard key={`hist-${verse.reference}-${index}`} verse={verse} showActions={false} />
                 ))
