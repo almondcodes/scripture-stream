@@ -109,16 +109,16 @@ async function main() {
   ];
 
   for (const template of defaultTemplates) {
-    await prisma.template.upsert({
-      where: { 
-        name_userId: {
-          name: template.name,
-          userId: template.userId
-        }
-      },
-      update: {},
-      create: template
+    // Check if template already exists
+    const existingTemplate = await prisma.template.findFirst({
+      where: { name: template.name }
     });
+    
+    if (!existingTemplate) {
+      await prisma.template.create({
+        data: template
+      });
+    }
   }
 
   console.log('✅ Default templates created');

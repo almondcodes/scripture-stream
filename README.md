@@ -62,7 +62,8 @@ If you prefer to run without Docker:
    ```bash
    sudo -u postgres psql
    CREATE DATABASE scripture_stream;
-   CREATE USER postgres WITH PASSWORD 'postgres';
+   # Note: On Pop!_OS/Ubuntu, the postgres user typically exists without a password
+   # If you need to set a password, run: ALTER USER postgres PASSWORD 'postgres';
    GRANT ALL PRIVILEGES ON DATABASE scripture_stream TO postgres;
    \q
    ```
@@ -76,6 +77,8 @@ If you prefer to run without Docker:
    ```bash
    cp backend/.env.example backend/.env
    # Edit backend/.env with your database and OBS settings
+   # For Pop!_OS/Ubuntu, the DATABASE_URL should be:
+   # DATABASE_URL="postgresql://postgres@localhost:5432/scripture_stream"
    ```
 
 5. **Set up database:**
@@ -84,6 +87,10 @@ If you prefer to run without Docker:
    npx prisma migrate dev
    npx prisma db seed
    ```
+   
+   **Note:** The seed script creates default users:
+   - Admin: `admin@scripturestream.com` / `admin123`
+   - User: `user@scripturestream.com` / `admin123`
 
 6. **Start development servers:**
    ```bash
@@ -94,6 +101,10 @@ If you prefer to run without Docker:
    - Frontend: http://localhost:5173
    - Backend API: http://localhost:3001
    - API Docs: http://localhost:3001/api-docs
+
+8. **Login with seeded accounts:**
+   - Admin: `admin@scripturestream.com` / `admin123`
+   - User: `user@scripturestream.com` / `admin123`
 
 ## 📁 Project Structure
 
@@ -149,9 +160,13 @@ When using `docker compose up`, PostgreSQL is automatically configured with:
    # Switch to postgres user
    sudo -u postgres psql
    
-   # Create database and user
+   # Create database
    CREATE DATABASE scripture_stream;
-   CREATE USER postgres WITH PASSWORD 'postgres';
+   
+   # On Pop!_OS/Ubuntu, the postgres user typically exists without a password
+   # If you need to set a password, run: ALTER USER postgres PASSWORD 'postgres';
+   
+   # Grant privileges
    GRANT ALL PRIVILEGES ON DATABASE scripture_stream TO postgres;
    
    # Exit psql
@@ -179,8 +194,8 @@ When using `docker compose up`, PostgreSQL is automatically configured with:
 
 ### Environment Variables
 ```env
-# Database
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/scripture_stream"
+# Database (for Pop!_OS/Ubuntu - no password needed)
+DATABASE_URL="postgresql://postgres@localhost:5432/scripture_stream"
 
 # JWT
 JWT_SECRET="your-super-secret-jwt-key"
@@ -233,10 +248,14 @@ sudo systemctl start postgresql
 
 #### Permission Denied
 ```bash
-# Reset PostgreSQL user password
+# On Pop!_OS/Ubuntu, the postgres user typically doesn't have a password
+# If you need to set one, run:
 sudo -u postgres psql
 ALTER USER postgres PASSWORD 'postgres';
 \q
+
+# Or update your .env file to remove the password:
+# DATABASE_URL="postgresql://postgres@localhost:5432/scripture_stream"
 ```
 
 #### Database Doesn't Exist
@@ -260,6 +279,9 @@ cd backend
 npx prisma migrate reset
 npx prisma db seed
 ```
+
+#### Seed Script Issues
+If you encounter template seeding errors, the seed script has been updated to handle the Template model correctly. The script now uses `findFirst` and `create` instead of `upsert` for templates.
 
 ### Docker Issues
 

@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect } from 'react'
 import { authAPI } from '../services/api'
 import toast from 'react-hot-toast'
 
-const AuthContext = createContext()
+export const AuthContext = createContext()
 
 const initialState = {
   user: null,
@@ -198,3 +198,4 @@ export function useAuth() {
   }
   return context
 }
+
