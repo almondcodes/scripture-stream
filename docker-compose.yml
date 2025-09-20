@@ -1,4 +1,6 @@
-version: '3.8'
+networks:
+  scripture-stream:
+    driver: bridge
 
 services:
   # PostgreSQL Database
@@ -19,6 +21,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - scripture-stream
 
   # Backend API
   backend:
@@ -46,6 +50,8 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
     restart: unless-stopped
+    networks:
+      - scripture-stream
 
   # Frontend
   frontend:
@@ -61,6 +67,8 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - scripture-stream
 
   # Redis (for caching and sessions)
   redis:
@@ -71,6 +79,8 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    networks:
+      - scripture-stream
 
 volumes:
   postgres_data:

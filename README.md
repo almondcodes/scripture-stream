@@ -24,30 +24,73 @@ A full-stack Bible verse streaming application designed for OBS Studio integrati
 
 ## 🚀 Quick Start
 
-1. **Install dependencies:**
+### Option 1: Docker (Recommended)
+
+The easiest way to get started is using Docker Compose, which handles all database setup automatically:
+
+```bash
+# Start all services (PostgreSQL, backend, frontend, Redis)
+docker compose up
+
+# Or run in background
+docker compose up -d
+```
+
+**Access points:**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:3001
+- PostgreSQL: localhost:5432
+
+### Option 2: Manual Setup
+
+If you prefer to run without Docker:
+
+1. **Install PostgreSQL:**
+   ```bash
+   # Ubuntu/Debian
+   sudo apt install postgresql postgresql-contrib
+   
+   # macOS with Homebrew
+   brew install postgresql
+   brew services start postgresql
+   
+   # Windows
+   # Download from https://www.postgresql.org/download/windows/
+   ```
+
+2. **Create database and user:**
+   ```bash
+   sudo -u postgres psql
+   CREATE DATABASE scripture_stream;
+   CREATE USER postgres WITH PASSWORD 'postgres';
+   GRANT ALL PRIVILEGES ON DATABASE scripture_stream TO postgres;
+   \q
+   ```
+
+3. **Install dependencies:**
    ```bash
    npm run install:all
    ```
 
-2. **Set up environment variables:**
+4. **Set up environment variables:**
    ```bash
    cp backend/.env.example backend/.env
    # Edit backend/.env with your database and OBS settings
    ```
 
-3. **Set up database:**
+5. **Set up database:**
    ```bash
    cd backend
    npx prisma migrate dev
    npx prisma db seed
    ```
 
-4. **Start development servers:**
+6. **Start development servers:**
    ```bash
    npm run dev
    ```
 
-5. **Open your browser:**
+7. **Open your browser:**
    - Frontend: http://localhost:5173
    - Backend API: http://localhost:3001
    - API Docs: http://localhost:3001/api-docs
@@ -79,6 +122,55 @@ scripture-stream/
 
 ## 🔧 Configuration
 
+### Database Setup
+
+#### Using Docker (Automatic)
+When using `docker compose up`, PostgreSQL is automatically configured with:
+- Database: `scripture_stream`
+- User: `postgres`
+- Password: `postgres`
+- Port: `5432`
+
+#### Manual PostgreSQL Setup
+
+1. **Install PostgreSQL:**
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update
+   sudo apt install postgresql postgresql-contrib
+   
+   # Start PostgreSQL service
+   sudo systemctl start postgresql
+   sudo systemctl enable postgresql
+   ```
+
+2. **Create database and user:**
+   ```bash
+   # Switch to postgres user
+   sudo -u postgres psql
+   
+   # Create database and user
+   CREATE DATABASE scripture_stream;
+   CREATE USER postgres WITH PASSWORD 'postgres';
+   GRANT ALL PRIVILEGES ON DATABASE scripture_stream TO postgres;
+   
+   # Exit psql
+   \q
+   ```
+
+3. **Run database migrations:**
+   ```bash
+   cd backend
+   npx prisma migrate dev
+   npx prisma db seed
+   ```
+
+4. **Verify database setup:**
+   ```bash
+   # Open Prisma Studio to view your database
+   npx prisma studio
+   ```
+
 ### OBS Studio Setup
 1. Install OBS Studio
 2. Enable WebSocket server in OBS (Tools → WebSocket Server Settings)
@@ -88,7 +180,7 @@ scripture-stream/
 ### Environment Variables
 ```env
 # Database
-DATABASE_URL="postgresql://username:password@localhost:5432/scripture_stream"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/scripture_stream"
 
 # JWT
 JWT_SECRET="your-super-secret-jwt-key"
@@ -125,6 +217,69 @@ NODE_ENV=development
 - `POST /api/obs/send-verse` - Send verse to OBS
 - `GET /api/obs/status` - Get OBS connection status
 - `POST /api/obs/connect` - Connect to OBS
+
+## 🔧 Troubleshooting
+
+### Database Issues
+
+#### Connection Refused
+```bash
+# Check if PostgreSQL is running
+sudo systemctl status postgresql
+
+# Start PostgreSQL if not running
+sudo systemctl start postgresql
+```
+
+#### Permission Denied
+```bash
+# Reset PostgreSQL user password
+sudo -u postgres psql
+ALTER USER postgres PASSWORD 'postgres';
+\q
+```
+
+#### Database Doesn't Exist
+```bash
+# Recreate database
+sudo -u postgres psql
+DROP DATABASE IF EXISTS scripture_stream;
+CREATE DATABASE scripture_stream;
+GRANT ALL PRIVILEGES ON DATABASE scripture_stream TO postgres;
+\q
+
+# Run migrations again
+cd backend
+npx prisma migrate dev
+```
+
+#### Prisma Migration Issues
+```bash
+# Reset database and run migrations
+cd backend
+npx prisma migrate reset
+npx prisma db seed
+```
+
+### Docker Issues
+
+#### Permission Denied (Linux)
+```bash
+# Add user to docker group
+sudo usermod -aG docker $USER
+# Log out and back in, then try:
+docker compose up
+```
+
+#### Port Already in Use
+```bash
+# Check what's using the port
+sudo lsof -i :5432  # PostgreSQL
+sudo lsof -i :3001  # Backend
+sudo lsof -i :5173  # Frontend
+
+# Stop conflicting services or change ports in docker-compose.yml
+```
 
 ## 🤝 Contributing
 
