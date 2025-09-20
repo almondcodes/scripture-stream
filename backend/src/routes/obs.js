@@ -9,8 +9,15 @@ const router = express.Router();
 // Validation middleware
 const obsConfigValidation = [
   body('name').notEmpty().withMessage('Connection name is required'),
-  body('url').isURL().withMessage('Valid URL is required'),
-  body('password').notEmpty().withMessage('Password is required'),
+  body('url').custom((value) => {
+    // Check if it's a valid WebSocket URL
+    const wsUrlPattern = /^wss?:\/\/.+/;
+    if (!wsUrlPattern.test(value)) {
+      throw new Error('Valid WebSocket URL is required (ws:// or wss://)');
+    }
+    return true;
+  }),
+  body('password').optional().isString(),
   body('sourceName').optional().isString()
 ];
 
@@ -28,15 +35,7 @@ router.post('/connect', obsConfigValidation, async (req, res, next) => {
 
     const { name, url, password, sourceName = 'Bible Verse' } = req.body;
 
-    // Create OBS connection
-    const connection = await obsService.createConnection({
-      url,
-      password,
-      sourceName,
-      userId: req.user.id
-    });
-
-    // Save connection to database
+    // Save connection to database first
     const savedConnection = await prisma.obsConnection.create({
       data: {
         userId: req.user.id,
@@ -49,14 +48,32 @@ router.post('/connect', obsConfigValidation, async (req, res, next) => {
       }
     });
 
+    // Try to create live OBS connection (this may fail if OBS isn't running)
+    let connection = null;
+    let connectionStatus = { connected: false, authenticated: false };
+    
+    try {
+      connection = await obsService.createConnection({
+        url,
+        password,
+        sourceName,
+        userId: req.user.id,
+        dbConnectionId: savedConnection.id
+      });
+      connectionStatus = obsService.getConnectionStatus(connection.id);
+    } catch (error) {
+      console.warn(`Failed to create live OBS connection for ${name}:`, error.message);
+      // Connection is saved to database but not live - this is OK
+    }
+
     res.json({
       success: true,
       data: {
-        connectionId: connection.id,
+        connectionId: connection?.id || null,
         connection: savedConnection,
-        status: obsService.getConnectionStatus(connection.id)
+        status: connectionStatus
       },
-      message: 'Connected to OBS successfully'
+      message: connection ? 'Connected to OBS successfully' : 'OBS connection saved (OBS Studio not available)'
     });
   } catch (error) {
     next(error);
@@ -75,26 +92,53 @@ router.post('/send-verse', async (req, res, next) => {
       });
     }
 
-    // Send verse to OBS
-    await obsService.sendVerse(connectionId, {
-      reference: verseRef,
-      text: verseText,
-      version
+    // Check if connection exists in database
+    const dbConnection = await prisma.obsConnection.findFirst({
+      where: { id: connectionId, userId: req.user.id }
     });
 
-    // Log to analytics
-    await prisma.analytics.create({
-      data: {
-        userId: req.user.id,
-        action: 'verse_sent_to_obs',
-        metadata: { connectionId, verseRef, version }
+    if (!dbConnection) {
+      return res.status(404).json({
+        error: 'OBS connection not found',
+        code: 'CONNECTION_NOT_FOUND'
+      });
+    }
+
+    // Try to send verse to OBS
+    try {
+      await obsService.sendVerse(connectionId, {
+        reference: verseRef,
+        text: verseText,
+        version
+      });
+
+      // Log to analytics
+      await prisma.analytics.create({
+        data: {
+          userId: req.user.id,
+          action: 'verse_sent_to_obs',
+          metadata: { connectionId, verseRef, version }
+        }
+      });
+
+      res.json({
+        success: true,
+        message: 'Verse sent to OBS successfully'
+      });
+    } catch (error) {
+      // Check if it's a connection availability error
+      if (error.message === 'OBS connection not available') {
+        return res.status(503).json({
+          error: 'OBS Studio is not running or not accessible',
+          message: 'Please ensure OBS Studio is running with the WebSocket server enabled, then try reconnecting your OBS connection.',
+          code: 'OBS_NOT_AVAILABLE',
+          connectionName: dbConnection.name
+        });
       }
-    });
-
-    res.json({
-      success: true,
-      message: 'Verse sent to OBS successfully'
-    });
+      
+      // Re-throw other errors
+      throw error;
+    }
   } catch (error) {
     next(error);
   }
@@ -132,6 +176,7 @@ router.get('/connections', async (req, res, next) => {
 
       return {
         ...conn,
+        connected: liveStatus ? liveStatus.status.connected : false,
         liveStatus: liveStatus ? liveStatus.status : { connected: false, authenticated: false }
       };
     });

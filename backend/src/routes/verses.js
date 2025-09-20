@@ -2,6 +2,7 @@ const express = require('express');
 const { body, query, validationResult } = require('express-validator');
 const { PrismaClient } = require('@prisma/client');
 const bibleService = require('../services/bibleService');
+const { authenticateToken } = require('../middleware/auth');
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -157,7 +158,7 @@ router.get('/versions', (req, res) => {
 });
 
 // Add verse to favorites (requires authentication)
-router.post('/favorite', async (req, res, next) => {
+router.post('/favorite', authenticateToken, async (req, res, next) => {
   try {
     const { reference, text, version = 'kjv' } = req.body;
 
@@ -199,7 +200,7 @@ router.post('/favorite', async (req, res, next) => {
 });
 
 // Remove verse from favorites
-router.delete('/favorite/:reference', async (req, res, next) => {
+router.delete('/favorite/:reference', authenticateToken, async (req, res, next) => {
   try {
     const { reference } = req.params;
 
@@ -220,7 +221,7 @@ router.delete('/favorite/:reference', async (req, res, next) => {
 });
 
 // Get user's favorite verses
-router.get('/favorites', async (req, res, next) => {
+router.get('/favorites', authenticateToken, async (req, res, next) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
@@ -252,7 +253,7 @@ router.get('/favorites', async (req, res, next) => {
 });
 
 // Get user's verse history
-router.get('/history', async (req, res, next) => {
+router.get('/history', authenticateToken, async (req, res, next) => {
   try {
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
@@ -284,7 +285,7 @@ router.get('/history', async (req, res, next) => {
 });
 
 // Add verse to history
-router.post('/history', async (req, res, next) => {
+router.post('/history', authenticateToken, async (req, res, next) => {
   try {
     const { reference, text, version = 'kjv' } = req.body;
 

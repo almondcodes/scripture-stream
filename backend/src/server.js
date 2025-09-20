@@ -15,6 +15,7 @@ const playlistRoutes = require('./routes/playlists');
 const obsRoutes = require('./routes/obs');
 const userRoutes = require('./routes/users');
 const templateRoutes = require('./routes/templates');
+const obsService = require('./services/obsService');
 
 const { errorHandler } = require('./middleware/errorHandler');
 const { notFound } = require('./middleware/notFound');
@@ -61,7 +62,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/verses', verseRoutes);
+app.use('/api/verses', verseRoutes); // Some routes need auth, some don't - handled in route file
 app.use('/api/playlists', authenticateToken, playlistRoutes);
 app.use('/api/obs', authenticateToken, obsRoutes);
 app.use('/api/users', authenticateToken, userRoutes);
@@ -144,10 +145,29 @@ process.on('SIGTERM', async () => {
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, () => {
+// Startup function to restore OBS connections
+async function startup() {
+  try {
+    // Restore OBS connections from database
+    const savedConnections = await prisma.obsConnection.findMany({
+      where: { isActive: true }
+    });
+    
+    if (savedConnections.length > 0) {
+      await obsService.restoreConnections(savedConnections);
+    }
+  } catch (error) {
+    console.error('Error during startup:', error);
+  }
+}
+
+server.listen(PORT, async () => {
   console.log(`🚀 ScriptureStream Backend running on port ${PORT}`);
   console.log(`📖 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 CORS Origin: ${process.env.CORS_ORIGIN || 'http://localhost:5173'}`);
+  
+  // Run startup tasks
+  await startup();
 });
 
 module.exports = { app, server, io, prisma };

@@ -25,7 +25,8 @@ class ObsService {
       url = process.env.OBS_DEFAULT_URL || 'ws://localhost:4455',
       password = process.env.OBS_DEFAULT_PASSWORD,
       sourceName = process.env.OBS_DEFAULT_SOURCE_NAME || 'Bible Verse',
-      userId = null
+      userId = null,
+      dbConnectionId = null
     } = config;
 
     return new Promise((resolve, reject) => {
@@ -37,6 +38,7 @@ class ObsService {
 
       const connection = {
         id: connectionId,
+        dbConnectionId, // Store the database connection ID for mapping
         ws,
         config: { url, password, sourceName, userId },
         isConnected: false,
@@ -117,12 +119,18 @@ class ObsService {
 
   /**
    * Send verse to OBS
-   * @param {string} connectionId - Connection ID
+   * @param {string} connectionId - Connection ID (can be live connection ID or database connection ID)
    * @param {Object} verseData - Verse data to send
    * @returns {Promise<boolean>} Success status
    */
   async sendVerse(connectionId, verseData) {
-    const connection = this.connections.get(connectionId);
+    // First try to find by live connection ID
+    let connection = this.connections.get(connectionId);
+    
+    // If not found, try to find by database connection ID
+    if (!connection) {
+      connection = this.getConnectionByDbId(connectionId);
+    }
     
     if (!connection || !connection.isConnected) {
       throw new Error('OBS connection not available');
@@ -318,6 +326,20 @@ class ObsService {
   }
 
   /**
+   * Find a live connection by database connection ID
+   * @param {string} dbConnectionId - Database connection ID
+   * @returns {Object|null} Live connection or null
+   */
+  getConnectionByDbId(dbConnectionId) {
+    for (const [id, connection] of this.connections) {
+      if (connection.dbConnectionId === dbConnectionId) {
+        return connection;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Close a connection
    * @param {string} connectionId - Connection ID
    */
@@ -355,6 +377,33 @@ class ObsService {
         console.log(`Cleaning up inactive OBS connection: ${id}`);
         connection.ws.close();
         this.connections.delete(id);
+      }
+    }
+  }
+
+  /**
+   * Restore connections from database (for server restart)
+   * @param {Array} savedConnections - Array of saved connections from database
+   */
+  async restoreConnections(savedConnections) {
+    console.log(`Restoring ${savedConnections.length} OBS connections...`);
+    
+    for (const savedConn of savedConnections) {
+      try {
+        // Only restore active connections
+        if (savedConn.isActive) {
+          await this.createConnection({
+            url: savedConn.url,
+            password: savedConn.password,
+            sourceName: savedConn.sourceName,
+            userId: savedConn.userId,
+            dbConnectionId: savedConn.id
+          });
+          console.log(`Restored OBS connection: ${savedConn.name}`);
+        }
+      } catch (error) {
+        console.warn(`Failed to restore OBS connection ${savedConn.name}:`, error.message);
+        // Continue with other connections even if one fails
       }
     }
   }
