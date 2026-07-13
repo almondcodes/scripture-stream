@@ -1,20 +1,20 @@
-# 📖 ScriptureStream
+# ScriptureStream
 
-A full-stack Bible verse streaming application designed for OBS Studio integration. Stream God's Word to your audience with real-time collaboration, playlists, and advanced OBS controls.
+Bible verse streaming for OBS Studio — real-time collaboration, playlists, and OBS WebSocket controls.
 
-## ✨ Features
+## Features
 
-- 🔐 **User Authentication** - Secure login and user management
-- 📖 **Multiple Bible Versions** - KJV, NIV, ESV, and more
-- 🎵 **Playlist Management** - Create and manage verse playlists
-- 👥 **Real-time Collaboration** - Multi-user support with Socket.io
-- 🎨 **Custom Templates** - Pre-designed verse layouts
-- 📱 **Responsive Design** - Works on desktop, tablet, and mobile
-- 🔄 **Auto-advance** - Timer-based verse progression
-- 📊 **Analytics** - Usage tracking and popular verses
-- 🎯 **OBS Integration** - Advanced WebSocket controls
+- **User Authentication** - Secure login and user management
+- **Multiple Bible Versions** - KJV, NIV, ESV, and more
+- **Playlist Management** - Create and manage verse playlists
+- **Real-time Collaboration** - Multi-user support with Socket.io
+- **Custom Templates** - Pre-designed verse layouts
+- **Responsive Design** - Works on desktop, tablet, and mobile
+- **Auto-advance** - Timer-based verse progression
+- **Analytics** - Usage tracking and popular verses
+- **OBS Integration** - Advanced WebSocket controls
 
-## 🏗️ Architecture
+## Architecture
 
 - **Backend**: Node.js + Express + Socket.io
 - **Frontend**: React + Vite + Tailwind CSS
@@ -22,9 +22,9 @@ A full-stack Bible verse streaming application designed for OBS Studio integrati
 - **Authentication**: JWT + bcrypt
 - **Real-time**: Socket.io for live updates
 
-## 🚀 Quick Start
+## Quick start
 
-### Option 1: Docker (Recommended)
+### Option 1: Docker (recommended)
 
 The easiest way to get started is using Docker Compose, which handles all database setup automatically:
 
@@ -109,9 +109,9 @@ If you prefer to run without Docker:
    - Admin: `admin@scripturestream.com` / `admin123`
    - User: `user@scripturestream.com` / `admin123`
    
-   **⚠️ Security Note:** Change these default passwords immediately in production!
+   **Security note:** Change these default passwords immediately in production!
 
-## 📁 Project Structure
+## Project structure
 
 ```
 scripture-stream/
@@ -404,7 +404,7 @@ sudo lsof -i :5173  # Frontend
 
 MIT License - see LICENSE file for details
 
-## ⚠️ Security Disclaimer
+## Security disclaimer
 
 This application is provided for educational and development purposes. When deploying to production:
 
